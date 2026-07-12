@@ -88,7 +88,8 @@ AWS EC2 VPN Gateway
 - Terraform validation prevents accidental 0.0.0.0/0 SSH access
 - Secrets excluded from Git
 - GitHub Actions secret scanning
-- Monitoring
+
+### Monitoring
 - Automated Prometheus installation
 - Automated Grafana installation
 - Node Exporter integration
