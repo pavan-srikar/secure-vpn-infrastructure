@@ -1,92 +1,157 @@
 # Networking Overview
 
-The VPN infrastructure uses WireGuard to establish encrypted peer-to-peer tunnels between remote devices and the AWS-hosted VPN gateway.
+The VPN infrastructure uses WireGuard to establish secure encrypted tunnels between remote clients and an AWS-hosted VPN gateway. The networking architecture supports multiple routing modes, allowing the VPN to be used for personal, enterprise, or hybrid networking scenarios.
 
 ---
 
-## Internal VPN Subnet
+# Network Architecture
 
-The VPN network uses the private subnet:
+```
+                Internet
+                    │
+        ┌───────────┴───────────┐
+        │                       │
+   Remote Laptop          Mobile Device
+        │                       │
+        └──── Encrypted WireGuard Tunnel ────┐
+                                             │
+                                   AWS EC2 VPN Gateway
+                                             │
+                          ┌──────────────────┴─────────────────┐
+                          │                                    │
+                  Internal VPN Network                 Internet Access
+                  (10.0.0.0/24)                  (Optional Full Tunnel)
+```
 
+---
+
+# VPN Address Space
+
+The VPN uses a dedicated private subnet.
+
+```
 10.0.0.0/24
-
-Example peer assignments:
-
-* VPN Gateway → 10.0.0.1
-* Remote Laptop → 10.0.0.2
-* Mobile Device → 10.0.0.3
-
----
-
-## IP Forwarding
-
-Linux IP forwarding is enabled to allow the EC2 instance to route traffic between VPN peers and external networks.
-
-Configuration:
-
-```bash
-net.ipv4.ip_forward=1
 ```
 
----
+Example assignments:
 
-## NAT Configuration
+| Device | VPN IP |
+|---------|---------|
+| VPN Gateway | 10.0.0.1 |
+| Laptop | 10.0.0.2 |
+| Mobile | 10.0.0.3 |
+| Additional Peer | 10.0.0.x |
 
-iptables NAT masquerading is used to allow VPN client traffic to exit through the EC2 network interface.
-
-Example configuration:
-
-```bash
-PostUp = iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
-PostDown = iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
-```
+Each peer receives a unique private address during provisioning.
 
 ---
 
-## Peer Management
+# Routing Modes
 
-Each remote device receives:
+The infrastructure supports multiple routing configurations.
 
-* unique private/public key pair
-* dedicated VPN IP address
-* peer-specific configuration
+## Split Tunnel
+
+Only selected private networks are routed through the VPN.
 
 Example:
 
-```ini
-[Peer]
-PublicKey = CLIENT_PUBLIC_KEY
-AllowedIPs = 10.0.0.2/32
+```
+AllowedIPs = 10.0.0.0/24
+```
+
+Suitable for:
+
+- Secure access to internal infrastructure
+- Development environments
+- Reduced bandwidth usage
+- Enterprise remote access
+
+---
+
+## Full Tunnel
+
+All client traffic is routed through the VPN gateway.
+
+Example:
+
+```
+AllowedIPs = 0.0.0.0/0
+```
+
+Benefits:
+
+- Secure browsing on public networks
+- Centralized outbound traffic
+- Public IP masking
+
+---
+
+## Enterprise Mode
+
+Enterprise mode combines secure internal access with configurable routing policies.
+
+Typical use cases include:
+
+- Internal servers
+- Private APIs
+- Bastion access
+- Administrative workloads
+
+Routing policies can be customized based on organizational requirements.
+
+---
+
+# IP Forwarding
+
+Linux IP forwarding is enabled on the VPN gateway, allowing traffic to be forwarded between VPN clients and external networks.
+
+```
+net.ipv4.ip_forward = 1
 ```
 
 ---
 
-## Planned Networking Enhancements
+# Network Address Translation (NAT)
 
-### Split Tunneling
+iptables performs NAT masquerading to allow VPN clients to access external networks through the EC2 instance.
 
-Future implementation will route only internal infrastructure traffic through the VPN while preserving direct internet access for normal browsing.
+This provides:
 
-### Internal DNS Resolution
-
-Internal services are planned to use private DNS entries such as:
-
-* grafana.internal
-* git.internal
-* jenkins.internal
-
-### Bastion Architecture
-
-The VPN gateway is intended to act as a secure entry point for accessing internal infrastructure resources hosted in private subnets.
+- Internet access
+- Address translation
+- Simplified routing
+- Secure outbound connectivity
 
 ---
 
-## Routing Design
+# Peer Connectivity
 
-Remote Device
-↓
-WireGuard Tunnel
-↓
-AWS VPN Gateway
-↓
-Private Internal Resources
+Each client connects independently using its own:
+
+- Public key
+- Private key
+- Assigned VPN IP
+- Allowed IP routes
+
+Peers remain isolated unless routing policies explicitly permit communication.
+
+---
+
+# High-Level Network Flow
+
+1. Client establishes an encrypted WireGuard tunnel.
+2. WireGuard authenticates the peer.
+3. Traffic is routed according to the selected routing mode.
+4. iptables performs NAT when Internet access is required.
+5. Responses return through the encrypted tunnel.
+
+---
+
+# Design Goals
+
+- Secure remote access
+- Low-latency encrypted networking
+- Flexible routing policies
+- Enterprise-style VPN architecture
+- Infrastructure automation compatibility
